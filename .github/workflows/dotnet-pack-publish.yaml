@@ -1,0 +1,104 @@
+name: Reusable — Pack & Publish to GitHub Packages (Ubuntu)
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: "Path to the .sln to restore/build"
+        required: true
+        type: string
+      project_glob:
+        description: "Glob for projects to pack (e.g., *_oM.csproj)"
+        required: true
+        type: string
+      owner_feed:
+        description: "GitHub Packages NuGet feed URL (org/user)"
+        required: true
+        type: string
+      dotnet_version:
+        description: ".NET SDK channel (e.g., 8.0.x)"
+        required: true
+        type: string
+      base_version:
+        description: "Base SemVer used for prereleases on branches"
+        required: true
+        type: string
+    secrets:
+      token:
+        description: "Token for registry auth (e.g., GITHUB_TOKEN)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  pack-and-publish:
+    runs-on: ubuntu-latest
+    concurrency: publish-${{ github.ref }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET and feed
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+          source-url: ${{ inputs.owner_feed }}
+        env:
+          # setup-dotnet configures NuGet auth for GitHub Packages on Linux using NUGET_AUTH_TOKEN
+          NUGET_AUTH_TOKEN: ${{ secrets.token }}
+      # The setup-dotnet action is cross-platform and supports private feeds via NUGET_AUTH_TOKEN. [2](https://stackoverflow.com/questions/62166035/how-to-use-github-nuget-packages-on-visual-studio-2019)
+
+      - name: Compute version (stable on tag, prerelease on non-tag)
+        id: version
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref }}"
+          if ($ref -like "refs/tags/v*") {
+            # refs/tags/v9.1.0 -> 9.1.0
+            $ver = $ref.Substring(11)
+          } else {
+            # prerelease for branches: base your alpha train here
+            $base = "${{ inputs.base_version }}"
+            $stamp = (Get-Date).ToString("yyyyMMdd.HHmm")
+            $short = "${{ github.sha }}".Substring(0,8)
+            $ver = "$base-alpha.$stamp+$short"
+          }
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Restore
+        run: dotnet restore "${{ inputs.solution }}"
+
+      - name: Build
+        run: dotnet build "${{ inputs.solution }}" -c Release --no-restore
+
+      - name: Pack selected projects
+        shell: pwsh
+        run: |
+          mkdir -p artifacts
+          $projects = Get-ChildItem -Recurse -Filter "${{ inputs.project_glob }}"
+          foreach ($p in $projects) {
+            dotnet pack $p.FullName -c Release --no-build -o artifacts -p:Version=${{ steps.version.outputs.version }}
+          }
+
+      - name: List artifacts
+        shell: pwsh
+        run: |
+          if (Test-Path artifacts) { Get-ChildItem artifacts -Force } else { Write-Host "artifacts/ missing"; exit 1 }
+
+      - name: Push each package to GitHub Packages
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "artifacts" -Filter *.nupkg | ForEach-Object {
+            Write-Host "Pushing $($_.FullName)"
+            dotnet nuget push "$($_.FullName)" `
+              --skip-duplicate `
+              --api-key $env:GITHUB_TOKEN `
+              --source "${{ inputs.owner_feed }}"
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.token }}
