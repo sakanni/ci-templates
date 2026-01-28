@@ -23,11 +23,6 @@ on:
         description: "Base SemVer used for prereleases on branches"
         required: true
         type: string
-      force_initial_publish:
-        description: "Onboarding: publish all matching projects once"
-        required: false
-        default: false
-        type: boolean
     secrets:
       token:
         description: "Token for registry auth (e.g., GITHUB_TOKEN)"
@@ -56,7 +51,6 @@ jobs:
         env:
           # setup-dotnet configures NuGet auth to GitHub Packages using this token
           NUGET_AUTH_TOKEN: ${{ secrets.token }}
-      # 'setup-dotnet' configures private feeds via NUGET_AUTH_TOKEN and works on Windows runners. [2](https://multiprojectdevops.github.io/tutorials/2_composite_actions/)
 
       - name: Compute version (stable on tag, prerelease on branch)
         id: version
@@ -74,77 +68,28 @@ jobs:
           }
           "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: Select projects to pack (incremental)
-        id: select
-        shell: pwsh
-        run: |
-          # Find all candidate projects matching the glob
-          $all = Get-ChildItem -Recurse -Filter "${{ inputs.project_glob }}"
-
-          if ("${{ inputs.force_initial_publish }}" -eq "true") {
-            # Onboarding: publish all matching projects once
-            $toPack = $all
-          } else {
-            # Determine changed files for this push; fallback for workflow_dispatch
-            $before = "${{ github.event.before }}"
-            $after  = "${{ github.sha }}"
-            if ([string]::IsNullOrEmpty($before)) {
-              $changedFiles = git diff --name-only HEAD~1 HEAD
-            } else {
-              $changedFiles = git diff --name-only $before $after
-            }
-
-            # Mark a project as changed if any file under its directory changed
-            $toPack = @()
-            foreach ($proj in $all) {
-              $projDir = Split-Path $proj.FullName
-              $changed = $false
-              foreach ($f in $changedFiles) {
-                $full = Join-Path (Get-Location) $f
-                if ($full.StartsWith($projDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-                  $changed = $true; break
-                }
-              }
-              if ($changed) { $toPack += $proj }
-            }
-          }
-
-          # Output a count for conditional steps
-          "count=$($toPack.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-          # Persist selection for next step
-          $json = $toPack | ForEach-Object { $_.FullName } | ConvertTo-Json
-          $path = Join-Path $env:RUNNER_TEMP "projects-to-pack.json"
-          Set-Content -Path $path -Value $json -Encoding utf8
-          Write-Host "Selected $($toPack.Count) project(s) to pack."
-          Write-Host "List saved to: $path"
-
-      - name: Restore solution
+      - name: Restore
         run: dotnet restore "${{ inputs.solution }}"
 
-      - name: Build solution
+      - name: Build
         run: dotnet build "${{ inputs.solution }}" -c Release --no-restore
 
-      - name: Pack selected projects
-        if: steps.select.outputs.count != '0'
+      - name: Pack ALL matching projects
         shell: pwsh
         run: |
           if (-not (Test-Path artifacts)) { New-Item -ItemType Directory -Path artifacts | Out-Null }
-          $path = Join-Path $env:RUNNER_TEMP "projects-to-pack.json"
-          $projects = Get-Content $path | ConvertFrom-Json
+          $projects = Get-ChildItem -Recurse -Filter "${{ inputs.project_glob }}"
           foreach ($p in $projects) {
-            Write-Host "Packing $p"
-            dotnet pack $p -c Release --no-build -o artifacts -p:Version=${{ steps.version.outputs.version }}
+            Write-Host "Packing $($p.FullName)"
+            dotnet pack $p.FullName -c Release --no-build -o artifacts -p:Version=${{ steps.version.outputs.version }}
           }
 
       - name: List artifacts
-        if: steps.select.outputs.count != '0'
         shell: pwsh
         run: |
           if (Test-Path artifacts) { Get-ChildItem artifacts -Force } else { Write-Host "artifacts/ missing"; exit 1 }
 
       - name: Push each package to GitHub Packages
-        if: steps.select.outputs.count != '0'
         shell: pwsh
         run: |
           Get-ChildItem -Path "artifacts" -Filter *.nupkg | ForEach-Object {
