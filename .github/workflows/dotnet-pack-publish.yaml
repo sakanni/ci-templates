@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   pack-and-publish:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     concurrency: publish-${{ github.ref }}
 
     steps:
