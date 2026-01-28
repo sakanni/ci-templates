@@ -1,0 +1,59 @@
+name: Reusable — Restore & Build from GitHub Packages (Windows)
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: "Path to the .sln"
+        required: true
+        type: string
+      dotnet_version:
+        description: "SDK channel to install (e.g., 8.0.x)"
+        required: true
+        type: string
+      packages_mode:
+        description: "If true, build with -p:USE_BHOM_PACKAGES=true"
+        type: boolean
+        default: true
+      configuration:
+        description: "Build configuration"
+        type: string
+        default: "Release"
+    secrets:
+      token:
+        description: "Token for registry auth (e.g., GITHUB_TOKEN)"
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET & GitHub Packages feed
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+          # Derive owner automatically → works under user now and org later
+          source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+        env:
+          # Authenticated restore against GitHub Packages
+          NUGET_AUTH_TOKEN: ${{ secrets.token }}
+      # 'setup-dotnet' both installs the SDK and configures NuGet auth for this job; no nuget.config is needed. [1](https://stackoverflow.com/questions/119271/copy-all-files-and-folders-using-msbuild)
+      # GitHub Packages NuGet always requires authentication, even for public packages. [2](https://www.geeksforgeeks.org/techtips/how-to-use-the-xcopy-command-in-windows/)
+
+      - name: dotnet restore
+        run: dotnet restore "${{ inputs.solution }}"
+
+      - name: dotnet build
+        run: >
+          dotnet build "${{ inputs.solution }}"
+          -c "${{ inputs.configuration }}"
+          --no-restore
+          ${{ inputs.packages_mode && '-p:USE_BHOM_PACKAGES=true' || '' }}
