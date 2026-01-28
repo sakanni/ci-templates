@@ -7,10 +7,6 @@ on:
         description: "Path to the .sln to restore/build"
         required: true
         type: string
-      project_glob:
-        description: "Glob for projects to pack (e.g., *_oM.csproj)"
-        required: true
-        type: string
       owner_feed:
         description: "GitHub Packages NuGet feed URL (org/user)"
         required: true
@@ -74,11 +70,11 @@ jobs:
       - name: Build
         run: dotnet build "${{ inputs.solution }}" -c Release --no-restore
 
-      - name: Pack ALL matching projects
+      - name: Pack ALL projects (discover *.csproj)
         shell: pwsh
         run: |
           if (-not (Test-Path artifacts)) { New-Item -ItemType Directory -Path artifacts | Out-Null }
-          $projects = Get-ChildItem -Recurse -Filter "${{ inputs.project_glob }}"
+          $projects = Get-ChildItem -Recurse -Filter "*.csproj"
           foreach ($p in $projects) {
             Write-Host "Packing $($p.FullName)"
             dotnet pack $p.FullName -c Release --no-build -o artifacts -p:Version=${{ steps.version.outputs.version }}
