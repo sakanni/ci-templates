@@ -1,0 +1,41 @@
+name: BHoM CI (GitHub Packages)
+
+on:
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+
+      - name: Inject BHoM CI MSBuild config
+        run: |
+          echo "Copying MSBuild overrides into repository root..."
+          cp $GITHUB_ACTION_PATH/../ci-msbuild/Directory.Build.props $GITHUB_WORKSPACE/
+          cp $GITHUB_ACTION_PATH/../ci-msbuild/Directory.Build.targets $GITHUB_WORKSPACE/
+          cp $GITHUB_ACTION_PATH/../ci-msbuild/BHoMReferenceSwapper.targets $GITHUB_WORKSPACE/
+        shell: bash
+
+      - name: Setup .NET with GitHub Packages
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          source-url: https://nuget.pkg.github.com/BHoM-migration-test-1/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore (package-only graph)
+        run: dotnet restore -p:IsCI=true
+
+      - name: Build
+        run: dotnet build --no-restore -p:IsCI=true -c Release

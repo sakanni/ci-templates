@@ -1,0 +1,41 @@
+<Project>
+  
+  <!-- ============================================ -->
+  <!-- CI Detection -->
+  <!-- ============================================ -->
+  <PropertyGroup>
+    <IsCI Condition="'$(CI)' == 'true' OR '$(GITHUB_ACTIONS)' == 'true'">true</IsCI>
+    <IsCI Condition="'$(IsCI)' == ''">false</IsCI>
+  </PropertyGroup>
+
+  <!-- ============================================ -->
+  <!-- Version Configuration -->
+  <!-- Developers can override this to test specific versions -->
+  <!-- ============================================ -->
+  <PropertyGroup>
+    <!-- Default to floating version for latest compatible -->
+    <BHoMPackageVersion Condition="'$(BHoMPackageVersion)' == ''">9.1.0-alpha.*</BHoMPackageVersion>
+  </PropertyGroup>
+
+  <!-- ============================================ -->
+  <!-- NuGet Registry Configuration for CI -->
+  <!-- Points to: https://github.com/orgs/BHoM-migration-test-1/packages -->
+  <!-- ============================================ -->
+  <PropertyGroup Condition="'$(IsCI)' == 'true'">
+    <RestoreAdditionalProjectSources>https://nuget.pkg.github.com/BHoM-migration-test-1/index.json</RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
+  <!-- ============================================ -->
+  <!-- Disable PostBuild xcopy in CI -->
+  <!-- ============================================ -->
+  <PropertyGroup Condition="'$(IsCI)' == 'true'">
+    <DisablePostBuildCopy>true</DisablePostBuildCopy>
+  </PropertyGroup>
+
+  <!-- ============================================ -->
+  <!-- Import dynamic reference swapper for CI -->
+  <!-- ============================================ -->
+  <Import Project="$(MSBuildThisFileDirectory)BHoMReferenceSwapper.targets" 
+          Condition="'$(IsCI)' == 'true'" />
+
+</Project>

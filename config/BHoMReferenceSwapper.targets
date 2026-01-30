@@ -1,0 +1,32 @@
+<Project>
+  
+  <!-- ============================================ -->
+  <!-- Dynamically swap cross-repo references to packages -->
+  <!-- Package names: BHoM, Geometry_oM, Data_oM, etc. (NO "BHoM." prefix) -->
+  <!-- ============================================ -->
+  
+  <Target Name="SwapBHoMReferences" BeforeTargets="CollectPackageReferences;ResolveAssemblyReferences">
+    
+    <!-- Find all Reference items pointing to BHoM\Assemblies -->
+    <ItemGroup>
+      <BHoMAssemblyReference Include="@(Reference)" 
+                              Condition="$([System.String]::Copy('%(Reference.HintPath)').Contains('BHoM\Assemblies'))" />
+    </ItemGroup>
+    
+    <!-- Convert to PackageReferences -->
+    <!-- Package names match assembly names exactly: BHoM, Geometry_oM, Data_oM, etc. -->
+    <ItemGroup>
+      <PackageReference Include="%(BHoMAssemblyReference.Identity)" 
+                        Version="$(BHoMPackageVersion)" />
+      
+      <!-- Remove original assembly references -->
+      <Reference Remove="@(BHoMAssemblyReference)" />
+    </ItemGroup>
+    
+    <Message Text="[CI Mode] Converted @(BHoMAssemblyReference -> '%(Identity)', ', ') to packages (version $(BHoMPackageVersion))" 
+             Importance="high" 
+             Condition="'@(BHoMAssemblyReference)' != ''" />
+    
+  </Target>
+
+</Project>

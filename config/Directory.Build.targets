@@ -1,0 +1,16 @@
+<Project>
+
+  <!-- ============================================ -->
+  <!-- GLOBAL CI: Disable all custom PostBuild targets -->
+  <!-- ============================================ -->
+  <Target Name="PostBuild" Condition="'$(IsCI)' == 'true'">
+    <!-- Empty target overrides ALL project PostBuild implementations -->
+    <Message Text="[CI Mode] PostBuild disabled." Importance="high" />
+  </Target>
+
+  <!-- Same for AfterBuild (some projects use this) -->
+  <Target Name="AfterBuild" Condition="'$(IsCI)' == 'true'">
+    <Message Text="[CI Mode] AfterBuild disabled." Importance="high" />
+  </Target>
+
+</Project>
