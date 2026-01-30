@@ -3,8 +3,9 @@ name: BHoM CI (GitHub Packages)
 on:
   workflow_call:
     secrets:
-      GITHUB_TOKEN:
+      repo_token:              # renamed from GITHUB_TOKEN
         required: true
+        description: Token with packages:read (and contents:read)
 
 permissions:
   contents: read
@@ -15,16 +16,22 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout target repository
+      - name: Checkout caller repository
         uses: actions/checkout@v4
 
+      - name: Checkout ci-templates repo (to fetch MSBuild overrides)
+        uses: actions/checkout@v4
+        with:
+          repository: BHoM-migration-test-1/ci-templates
+          path: ci-templates
+
       - name: Inject BHoM CI MSBuild config
+        shell: bash
         run: |
           echo "Copying MSBuild overrides into repository root..."
-          cp $GITHUB_ACTION_PATH/../ci-msbuild/Directory.Build.props $GITHUB_WORKSPACE/
-          cp $GITHUB_ACTION_PATH/../ci-msbuild/Directory.Build.targets $GITHUB_WORKSPACE/
-          cp $GITHUB_ACTION_PATH/../ci-msbuild/BHoMReferenceSwapper.targets $GITHUB_WORKSPACE/
-        shell: bash
+          cp ci-templates/ci-msbuild/Directory.Build.props "$GITHUB_WORKSPACE"/
+          cp ci-templates/ci-msbuild/Directory.Build.targets "$GITHUB_WORKSPACE"/
+          cp ci-templates/ci-msbuild/BHoMReferenceSwapper.targets "$GITHUB_WORKSPACE"/
 
       - name: Setup .NET with GitHub Packages
         uses: actions/setup-dotnet@v4
@@ -32,7 +39,8 @@ jobs:
           dotnet-version: 8.0.x
           source-url: https://nuget.pkg.github.com/BHoM-migration-test-1/index.json
         env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # use the mapped secret name
+          NUGET_AUTH_TOKEN: ${{ secrets.repo_token }}
 
       - name: Restore (package-only graph)
         run: dotnet restore -p:IsCI=true
