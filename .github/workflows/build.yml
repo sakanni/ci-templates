@@ -29,9 +29,9 @@ jobs:
         shell: bash
         run: |
           echo "Copying MSBuild overrides into repository root..."
-          cp ci-templates/ci-msbuild/Directory.Build.props "$GITHUB_WORKSPACE"/
-          cp ci-templates/ci-msbuild/Directory.Build.targets "$GITHUB_WORKSPACE"/
-          cp ci-templates/ci-msbuild/BHoMReferenceSwapper.targets "$GITHUB_WORKSPACE"/
+          cp ci-templates/config/Directory.Build.props "$GITHUB_WORKSPACE"/
+          cp ci-templates/config/Directory.Build.targets "$GITHUB_WORKSPACE"/
+          cp ci-templates/config/BHoMReferenceSwapper.targets "$GITHUB_WORKSPACE"/
 
       - name: Setup .NET with GitHub Packages
         uses: actions/setup-dotnet@v4
